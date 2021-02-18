@@ -12,50 +12,50 @@ nfnet_params.update(
         "F0": {
             "width": [256, 512, 1536, 1536],
             "depth": [1, 2, 6, 3],
-            "train_imsize": 192,
+            "train_imsize": args.img_size,
             "test_imsize": 256,
             "RA_level": "405",
-            "drop_rate": 0.2,
+            "drop_rate": args.drop,
         },
         "F1": {
             "width": [256, 512, 1536, 1536],
             "depth": [2, 4, 12, 6],
-            "train_imsize": 224,
+            "train_imsize": args.img_size,
             "test_imsize": 320,
             "RA_level": "410",
-            "drop_rate": 0.3,
+            "drop_rate": args.drop,
         },
         "F2": {
             "width": [256, 512, 1536, 1536],
             "depth": [3, 6, 18, 9],
-            "train_imsize": 256,
+            "train_imsize": args.img_size,
             "test_imsize": 352,
             "RA_level": "410",
-            "drop_rate": 0.4,
+            "drop_rate": args.drop,
         },
         "F3": {
             "width": [256, 512, 1536, 1536],
             "depth": [4, 8, 24, 12],
-            "train_imsize": 320,
+            "train_imsize": args.img_size,
             "test_imsize": 416,
             "RA_level": "415",
-            "drop_rate": 0.4,
+            "drop_rate": args.drop,
         },
         "F4": {
             "width": [256, 512, 1536, 1536],
             "depth": [5, 10, 30, 15],
-            "train_imsize": 384,
+            "train_imsize": args.img_size,
             "test_imsize": 512,
             "RA_level": "415",
-            "drop_rate": 0.5,
+            "drop_rate": args.drop,
         },
         "F5": {
             "width": [256, 512, 1536, 1536],
             "depth": [6, 12, 36, 18],
-            "train_imsize": 416,
+            "train_imsize": args.img_size,
             "test_imsize": 544,
             "RA_level": "415",
-            "drop_rate": 0.5,
+            "drop_rate": args.drop,
         },
         "F6": {
             "width": [256, 512, 1536, 1536],
@@ -68,10 +68,10 @@ nfnet_params.update(
         "F7": {
             "width": [256, 512, 1536, 1536],
             "depth": [8, 16, 48, 24],
-            "train_imsize": 480,
+            "train_imsize": args.img_size,
             "test_imsize": 608,
             "RA_level": "415",
-            "drop_rate": 0.5,
+            "drop_rate": args.drop,
         },
     }
 )
@@ -156,17 +156,17 @@ class NFNet(tf.keras.Model):
         variant="F0",
         width=1.0,
         se_ratio=0.5,
-        alpha=0.2,
-        stochdepth_rate=0.1,
+        alpha=args.alpha,
+        stochdepth_rate=args.drop,
         drop_rate=None,
-        activation="gelu",
+        activation= args.act,
         fc_init=None,
         final_conv_mult=2,
         final_conv_ch=None,
         use_two_convs=True,
         name="NFNet",
-        label_smoothing=0.1,
-        ema_decay=0.99999,
+        label_smoothing=args.label_smoothing,
+        ema_decay=args.ema_decay,
     ):
         super(NFNet, self).__init__(name=name)
         self.num_classes = num_classes
@@ -364,14 +364,14 @@ class NFBlock(tf.keras.Model):
         kernel_shape=3,
         group_size=128,
         stride=1,
-        beta=1.0,
-        alpha=0.2,
+        beta=args.beta,
+        alpha=args.alpha,
         which_conv=WSConv2D,
-        activation=tf.keras.activations.gelu,
+        activation=args.act,
         big_width=True,
         use_two_convs=True,
-        stochdepth_rate=None,
-        name=None,
+        stochdepth_rate=args.drop,
+        name='NFNet',
     ):
         super(NFBlock, self).__init__(name=name)
         self.in_ch, self.out_ch = in_ch, out_ch
@@ -490,7 +490,7 @@ def unitwise_norm(x):
     return tf.math.reduce_sum(x ** 2, axis=axis, keepdims=keepdims) ** 0.5
 
 
-def clip_gradient(grad, weight, clipping=0.01, eps=1e-3):
+def clip_gradient(grad, weight, clipping=args.clipping, eps=1e-3):
     param_norm = tf.math.maximum(unitwise_norm(weight), eps)
     grad_norm = unitwise_norm(grad)
     max_norm = param_norm * clipping
@@ -501,3 +501,34 @@ def clip_gradient(grad, weight, clipping=0.01, eps=1e-3):
     # but we include it in practice as a "just-in-case".
     clipped_grad = grad * (max_norm / tf.math.maximum(grad_norm, 1e-6))
     return tf.where(trigger, clipped_grad, grad)
+    
+def count_params(model, trainable_only=True):
+  """Returns the count of all model parameters, or just trainable ones."""
+    if not trainable_only:
+        return model.count_params()
+    else:
+        return int(
+                   np.sum([
+                   tf.keras.backend.count_params(p) for p in model.trainable_weights
+                   ]))
+
+
+def load_weights(model: tf.keras.Model,
+                 model_weights_path: Text,
+                 weights_format: Text = 'saved_model'):
+  """Load model weights from the given file path.
+  Args:
+    model: the model to load weights into
+    model_weights_path: the path of the model weights
+    weights_format: the model weights format. One of 'saved_model', 'h5', or
+      'checkpoint'.
+  """
+    if weights_format == 'saved_model':
+        loaded_model = tf.keras.models.load_model(model_weights_path)
+        model.set_weights(loaded_model.get_weights())
+    else:
+        model.load_weights(model_weights_path)    
+        
+        
+
+
