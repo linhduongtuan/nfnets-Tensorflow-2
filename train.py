@@ -5,7 +5,7 @@ import tensorflow as tf
 import tensorflow_addons as tfa
 
 from dataset import load, Split
-from nfnet import NFNet, nfnet_params
+from nfnet import NFNet, nfnet_params, count_params, load_weights
 
 
 NUM_CLASSES = 1000
@@ -16,32 +16,32 @@ def parse_args():
     """Parse command line arguments."""
     ap = argparse.ArgumentParser()
     ap.add_argument(
-        "-v",
-        "--variant",
+        "-m",
+        "--model",
         default="F0",
         type=str,
-        help="choose model variant (default",
+        help="choose model variant (default: F0), can choose F0-F7"
     )
     ap.add_argument(
         "-b",
         "--batch_size",
         default=4096,
         type=int,
-        help="train batch size",
+        help="train batch size"
     )
     ap.add_argument(
         "-n",
         "--num_epochs",
         default=360,
         type=int,
-        help="number of training epochs",
+        help="number of training epochs"
     )
     ap.add_argument(
         "-l",
         "--label_smoothing",
         default=0.1,
         type=float,
-        help="label_smoothing",
+        help="label_smoothing"
     )
 
     ap.add_argument(
@@ -49,7 +49,7 @@ def parse_args():
         "--clipping",
         default=0.01,
         type=float,
-        help="AGC clipping param",
+        help="AGC clipping param"
     )
     ap.add_argument(
         "-d",
@@ -90,13 +90,19 @@ def parse_args():
        '--act', 
        type=str, 
        default='gelu',
-       help='Choose activation function. One of ('gelu', 'silu', 'crelu', 'leaky_relu', 'log_sigmoid', 'log_softmax', 'relu', 'relu6', 'selu', 'sigmoid', 'soft_sign', 'soft_plus', 'tanh', )'
+       help='Choose activation function. One of ('gelu', 'silu', 'crelu', 'leaky_relu', 'log_sigmoid', 'log_softmax', 'relu', 'relu6', 'selu', 'sigmoid', 'soft_sign', 'soft_plus', 'tanh' )'
        )
     ap.add_argument(
        '--alpha', 
        type=float, 
-       default=0.01,
-       help='clipping thresholds λ of AGC for different batch sizes  (default: 0.01)'
+       default=0.2,
+       help='clipping thresholds λ of AGC for different batch sizes  (default: 0.2)'
+       )
+     ap.add_argument(
+       '--beta', 
+       type=float, 
+       default=1,
+       help='clipping thresholds λ of AGC for different batch sizes  (default: 1)'
        )
     ap.add_argument(
        "-e",
@@ -119,7 +125,7 @@ def main(args):
 
     model = NFNet(
         num_classes,
-        variant="F0",
+        variant=args.model,
         width=1.0,
         se_ratio=0.5,
         alpha=args.alpha,
@@ -134,6 +140,9 @@ def main(args):
         label_smoothing=args.label_smoothing,
         ema_decay=args.ema_decay,
     )
+    count = count_params(model, trainable_only=True) 
+    print("The number of trainable parameters of the model is:",count)
+    
     model.build((1, 224, 224, 3))
     lr_decayed_fn = tf.keras.experimental.CosineDecay(
         initial_learning_rate=max_lr,
